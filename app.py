@@ -14,32 +14,16 @@ BOARD_ID = st.secrets.get("MONDAY_BOARD_ID", "5098274792")
 PRIORITY_ORDER = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
 PRIORITY_COLORS = {"Critical": "#A32D2D", "High": "#E24B4A", "Medium": "#EF9F27", "Low": "#639922"}
 
-COLUMN_MAP = {
-    "status": "Status",
-    "priority": "Priority",
-    "customer": "Customer",
-    "issue_type": "Issue Type",
-    "resolution_type": "Resolution Type",
-    "date_closed": "Date Closed",
-    "numbers": "Time Spent (minutes)",
-    "customer_issue_verified": "Customer Issue Verified",
-    "issue_source": "Issue Source",
-    "open_by": "Open By",
-    "detailed_description": "Detailed Description",
-}
-
 @st.cache_data(ttl=60)
 def fetch_monday_data():
     query = """
     {
       boards(ids: %s) {
+        columns { id title }
         items_page(limit: 500) {
           items {
             name
-            column_values {
-              id
-              text
-            }
+            column_values { id text }
           }
         }
       }
@@ -56,21 +40,25 @@ def fetch_monday_data():
         }
     )
     data = response.json()
-    items = data["data"]["boards"][0]["items_page"]["items"]
+    board = data["data"]["boards"][0]
+    columns = {col["id"]: col["title"] for col in board["columns"]}
+    items = board["items_page"]["items"]
+
     rows = []
     for item in items:
         row = {"Name": item["name"]}
         for col in item["column_values"]:
-            label = COLUMN_MAP.get(col["id"], col["id"])
-            row[label] = col["text"] or ""
+            title = columns.get(col["id"], col["id"])
+            row[title] = col["text"] or ""
         rows.append(row)
 
     df = pd.DataFrame(rows)
-    if "Time Spent (minutes)" in df.columns:
-        df["Time Spent (minutes)"] = pd.to_numeric(df["Time Spent (minutes)"], errors="coerce").fillna(0)
+    time_col = "Time Spent (minutes)"
+    if time_col in df.columns:
+        df[time_col] = pd.to_numeric(df[time_col], errors="coerce").fillna(0)
     else:
-        df["Time Spent (minutes)"] = 0
-    return df
+        df[time_col] = 0
+    return df, columns
 
 def top_priority(priorities):
     ranked = [PRIORITY_ORDER.get(p, 99) for p in priorities]
@@ -82,17 +70,22 @@ def main():
     st.caption(f"Last refresh: {datetime.now().strftime('%H:%M:%S')}  •  Auto-refreshes every 60 seconds")
 
     with st.spinner("Loading data from Monday..."):
-        df = fetch_monday_data()
+        df, columns = fetch_monday_data()
 
     if df.empty:
         st.warning("No data found on this board.")
         return
 
+    status_col = "Status"
+    priority_col = "Priority"
+    customer_col = "Customer"
+    time_col = "Time Spent (minutes)"
+
     total = len(df)
-    resolved = len(df[df.get("Status", pd.Series(dtype=str)).str.strip() == "Resolved"]) if "Status" in df.columns else 0
-    waiting = len(df[df["Status"].str.lower().str.contains("wait", na=False)]) if "Status" in df.columns else 0
-    open_t = len(df[df["Status"].str.strip() == "Open"]) if "Status" in df.columns else 0
-    avg_time = int(df["Time Spent (minutes)"].mean()) if total else 0
+    resolved = len(df[df[status_col].str.strip() == "Resolved"]) if status_col in df.columns else 0
+    waiting = len(df[df[status_col].str.lower().str.contains("wait", na=False)]) if status_col in df.columns else 0
+    open_t = len(df[df[status_col].str.strip() == "Open"]) if status_col in df.columns else 0
+    avg_time = int(df[time_col].mean()) if total and time_col in df.columns else 0
 
     c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("📋 Total Tickets", total)
@@ -142,16 +135,15 @@ def main():
             st.plotly_chart(fig, use_container_width=True)
 
     st.subheader("Tickets by Customer — sorted by highest priority")
-    if "Customer" in df.columns and "Priority" in df.columns:
-        cust_data = df.groupby("Customer").agg(Count=("Name", "count"), Priorities=("Priority", list)).reset_index()
+    if customer_col in df.columns and priority_col in df.columns:
+        cust_data = df.groupby(customer_col).agg(Count=("Name", "count"), Priorities=(priority_col, list)).reset_index()
         cust_data["Top Priority"] = cust_data["Priorities"].apply(top_priority)
         cust_data["Priority Rank"] = cust_data["Top Priority"].map(lambda p: PRIORITY_ORDER.get(p, 99))
         cust_data["Color"] = cust_data["Top Priority"].map(lambda p: PRIORITY_COLORS.get(p, "#888780"))
         cust_data = cust_data.sort_values("Priority Rank")
-
         fig = go.Figure(go.Bar(
             x=cust_data["Count"],
-            y=cust_data["Customer"],
+            y=cust_data[customer_col],
             orientation="h",
             marker_color=cust_data["Color"],
             text=cust_data["Top Priority"],
