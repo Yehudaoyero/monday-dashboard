@@ -25,14 +25,20 @@ def gql(query):
 
 @st.cache_data(ttl=60)
 def fetch_monday_data():
+    # Step 1: get columns + items with all column values including linked item names
     data = gql("""
     {
       boards(ids: %s) {
-        columns { id title }
+        columns { id title type }
         items_page(limit: 500) {
           items {
             name
-            column_values { id text value }
+            column_values {
+              id
+              text
+              value
+              type
+            }
           }
         }
       }
@@ -41,6 +47,7 @@ def fetch_monday_data():
 
     board = data["data"]["boards"][0]
     columns = {col["id"]: col["title"] for col in board["columns"]}
+    col_types = {col["id"]: col["type"] for col in board["columns"]}
     items = board["items_page"]["items"]
 
     rows = []
@@ -48,16 +55,23 @@ def fetch_monday_data():
         row = {"Name": item["name"]}
         for col in item["column_values"]:
             title = columns.get(col["id"], col["id"])
+            col_type = col_types.get(col["id"], "")
             text = col.get("text") or ""
-            if not text and col.get("value"):
+
+            # For connect_boards / lookup columns — parse linked item names from value
+            if not text and col.get("value") and col_type in ("board_relation", "lookup", "crm_contacts"):
                 try:
                     val = json.loads(col["value"])
-                    if isinstance(val, dict):
-                        text = val.get("display_value") or val.get("text") or val.get("name") or ""
-                    elif isinstance(val, list) and val:
-                        text = str(val[0])
+                    if isinstance(val, dict) and "linkedPulseIds" in val:
+                        ids = [str(p["linkedPulseId"]) for p in val.get("linkedPulseIds", [])]
+                        if ids:
+                            # fetch names of linked items
+                            linked = gql("{items(ids:[%s]){name}}" % ",".join(ids))
+                            names = [i["name"] for i in linked.get("data", {}).get("items", [])]
+                            text = ", ".join(names)
                 except:
                     pass
+
             row[title] = text
         rows.append(row)
 
