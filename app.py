@@ -81,11 +81,13 @@ def fetch_monday_data():
             label = COLUMN_MAP.get(col["id"], col["id"])
             row[label] = col["text"] or ""
         rows.append(row)
-
     df = pd.DataFrame(rows)
-    df["Time Spent (minutes)"] = pd.to_numeric(
-        df.get("Time Spent (minutes)", 0), errors="coerce"
-    ).fillna(0)
+  if "Time Spent (minutes)" in df.columns:
+        df["Time Spent (minutes)"] = pd.to_numeric(
+            df["Time Spent (minutes)"], errors="coerce"
+        ).fillna(0)
+    else:
+        df["Time Spent (minutes)"] = 0
     return df
 
 # ─── HELPERS ──────────────────────────────────────────────
