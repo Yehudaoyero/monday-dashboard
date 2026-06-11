@@ -64,10 +64,10 @@ def fetch_monday_data():
     return df
 
 def main():
-    col_logo, col_title = st.columns([1, 8])
+    col_logo, col_title = st.columns([2, 8])
     with col_logo:
         try:
-            st.image("Logo.png", width=80)
+            st.image("Logo.png", width=160)
         except:
             pass
     with col_title:
