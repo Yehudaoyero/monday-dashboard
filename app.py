@@ -12,9 +12,6 @@ st.set_page_config(page_title="Customer Support Dashboard", page_icon="🎯", la
 API_TOKEN = st.secrets["MONDAY_API_TOKEN"]
 BOARD_ID = st.secrets.get("MONDAY_BOARD_ID", "5098274792")
 
-PRIORITY_ORDER = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
-PRIORITY_COLORS = {"Critical": "#A32D2D", "High": "#E24B4A", "Medium": "#EF9F27", "Low": "#639922"}
-
 def gql(query):
     r = requests.post(
         "https://api.monday.com/v2",
@@ -25,7 +22,6 @@ def gql(query):
 
 @st.cache_data(ttl=60)
 def fetch_monday_data():
-    # Step 1: get columns + items with all column values including linked item names
     data = gql("""
     {
       boards(ids: %s) {
@@ -33,21 +29,19 @@ def fetch_monday_data():
         items_page(limit: 500) {
           items {
             name
-            column_values {
-              id
-              text
-              value
-              type
-            }
+            column_values { id text value }
           }
         }
       }
     }
     """ % BOARD_ID)
 
+    if "errors" in data:
+        st.error(f"API Error: {data['errors']}")
+        return pd.DataFrame()
+
     board = data["data"]["boards"][0]
     columns = {col["id"]: col["title"] for col in board["columns"]}
-    col_types = {col["id"]: col["type"] for col in board["columns"]}
     items = board["items_page"]["items"]
 
     rows = []
@@ -55,24 +49,7 @@ def fetch_monday_data():
         row = {"Name": item["name"]}
         for col in item["column_values"]:
             title = columns.get(col["id"], col["id"])
-            col_type = col_types.get(col["id"], "")
-            text = col.get("text") or ""
-
-            # For connect_boards / lookup columns — parse linked item names from value
-            if not text and col.get("value") and col_type in ("board_relation", "lookup", "crm_contacts"):
-                try:
-                    val = json.loads(col["value"])
-                    if isinstance(val, dict) and "linkedPulseIds" in val:
-                        ids = [str(p["linkedPulseId"]) for p in val.get("linkedPulseIds", [])]
-                        if ids:
-                            # fetch names of linked items
-                            linked = gql("{items(ids:[%s]){name}}" % ",".join(ids))
-                            names = [i["name"] for i in linked.get("data", {}).get("items", [])]
-                            text = ", ".join(names)
-                except:
-                    pass
-
-            row[title] = text
+            row[title] = col.get("text") or ""
         rows.append(row)
 
     df = pd.DataFrame(rows)
@@ -82,11 +59,6 @@ def fetch_monday_data():
     else:
         df[time_col] = 0
     return df
-
-def top_priority(priorities):
-    ranked = [PRIORITY_ORDER.get(p, 99) for p in priorities]
-    best = min(ranked)
-    return next((k for k, v in PRIORITY_ORDER.items() if v == best), "")
 
 def main():
     st.title("🎯 Customer Support Dashboard")
@@ -100,8 +72,8 @@ def main():
         return
 
     status_col = "Status"
-    customer_col = "Customer"
     time_col = "Time Spent (minutes)"
+    customer_col = "Customer"
 
     total = len(df)
     resolved = len(df[df[status_col].str.strip() == "Resolved"]) if status_col in df.columns else 0
@@ -156,24 +128,30 @@ def main():
             fig.update_layout(showlegend=True, margin=dict(t=10, b=10), height=280)
             st.plotly_chart(fig, use_container_width=True)
 
-    st.subheader("Tickets by Customer — sorted by highest priority")
-    if customer_col in df.columns and "Priority" in df.columns:
+    # Tickets by Customer — sorted by most tickets
+    st.subheader("Tickets by Customer — sorted by volume")
+    if customer_col in df.columns:
         df_cust = df[df[customer_col].str.strip() != ""]
         if not df_cust.empty:
-            cust_data = df_cust.groupby(customer_col).agg(Count=("Name", "count"), Priorities=("Priority", list)).reset_index()
-            cust_data["Top Priority"] = cust_data["Priorities"].apply(top_priority)
-            cust_data["Priority Rank"] = cust_data["Top Priority"].map(lambda p: PRIORITY_ORDER.get(p, 99))
-            cust_data["Color"] = cust_data["Top Priority"].map(lambda p: PRIORITY_COLORS.get(p, "#888780"))
-            cust_data = cust_data.sort_values("Priority Rank")
+            cust_data = df_cust[customer_col].value_counts().reset_index()
+            cust_data.columns = ["Customer", "Count"]
+            cust_data = cust_data.sort_values("Count", ascending=True)
+
+            colors = ["#378ADD"] * len(cust_data)
+
             fig = go.Figure(go.Bar(
                 x=cust_data["Count"],
-                y=cust_data[customer_col],
+                y=cust_data["Customer"],
                 orientation="h",
-                marker_color=cust_data["Color"],
-                text=cust_data["Top Priority"],
+                marker_color=colors,
+                text=cust_data["Count"],
                 textposition="auto",
             ))
-            fig.update_layout(height=max(200, len(cust_data) * 50 + 80), margin=dict(t=10, b=10), xaxis=dict(title="Tickets", dtick=1), yaxis=dict(autorange="reversed"))
+            fig.update_layout(
+                height=max(200, len(cust_data) * 50 + 80),
+                margin=dict(t=10, b=10),
+                xaxis=dict(title="Tickets", dtick=1),
+            )
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("No customer data available")
