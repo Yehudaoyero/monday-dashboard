@@ -45,25 +45,23 @@ def fetch_monday_data():
 
     board = data["data"]["boards"][0]
 
-    # Build label maps for dropdown columns
-    dropdown_labels = {}
+    # Build dropdown label maps: col_id -> {label_id -> label_name}
+    dropdown_maps = {}
     columns = {}
     for col in board["columns"]:
         columns[col["id"]] = col["title"]
         try:
             settings = json.loads(col.get("settings_str") or "{}")
-            labels = settings.get("labels", [])
+            labels = settings.get("labels", {})
             if labels:
-                # labels is a list of {id, name} or dict {id: name}
-                if isinstance(labels, list):
-                    dropdown_labels[col["id"]] = {str(l["id"]): l["name"] for l in labels if "id" in l and "name" in l}
-                elif isinstance(labels, dict):
-                    dropdown_labels[col["id"]] = {str(k): v for k, v in labels.items()}
+                if isinstance(labels, dict):
+                    dropdown_maps[col["id"]] = {str(k): str(v) for k, v in labels.items()}
+                elif isinstance(labels, list):
+                    dropdown_maps[col["id"]] = {str(l.get("id","")): str(l.get("name","")) for l in labels}
         except:
             pass
 
     items = board["items_page"]["items"]
-
     rows = []
     for item in items:
         row = {"Name": item["name"]}
@@ -72,14 +70,17 @@ def fetch_monday_data():
             title = columns.get(col_id, col_id)
             text = col.get("text") or ""
 
-            # If text looks like a number and we have dropdown labels — map it
-            if col_id in dropdown_labels and text:
-                label_map = dropdown_labels[col_id]
-                # text might be comma-separated IDs
-                parts = [p.strip() for p in text.split(",")]
-                mapped = [label_map.get(p, p) for p in parts if p]
-                if mapped:
-                    text = ", ".join(mapped)
+            # For dropdown columns: parse IDs from value and map to names
+            if col_id in dropdown_maps and col.get("value"):
+                try:
+                    val = json.loads(col["value"])
+                    ids = val.get("ids", [])
+                    label_map = dropdown_maps[col_id]
+                    names = [label_map.get(str(i), str(i)) for i in ids]
+                    if names:
+                        text = ", ".join(names)
+                except:
+                    pass
 
             row[title] = text
         rows.append(row)
