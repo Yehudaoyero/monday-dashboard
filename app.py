@@ -64,15 +64,18 @@ def fetch_monday_data():
     return df
 
 def main():
-    col_logo, col_title = st.columns([2, 8])
-    with col_logo:
-        try:
-            st.image("Logo.png", width=160)
-        except:
-            pass
-    with col_title:
-        st.title("Customer Support Dashboard")
-        st.caption(f"Last refresh: {datetime.now().strftime('%H:%M:%S')}  •  Auto-refreshes every 60 seconds")
+    st.markdown(
+        f"""
+        <div style="display:flex; align-items:center; gap:16px; margin-bottom:8px;">
+            <img src="https://raw.githubusercontent.com/Yehudaoyero/monday-dashboard/main/Logo.png" height="60">
+            <div>
+                <div style="font-size:28px; font-weight:700; color: var(--text-color);">Customer Support Dashboard</div>
+                <div style="font-size:13px; color:gray;">Last refresh: {datetime.now().strftime('%H:%M:%S')} • Auto-refreshes every 60 seconds</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
     with st.spinner("Loading data from Monday..."):
         df = fetch_monday_data()
