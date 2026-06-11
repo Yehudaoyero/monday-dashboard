@@ -5,7 +5,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 import time
-import json
 
 st.set_page_config(page_title="Customer Support Dashboard", page_icon="🎯", layout="wide")
 
@@ -18,26 +17,29 @@ def gql(query):
         json={"query": query},
         headers={"Authorization": API_TOKEN, "Content-Type": "application/json", "API-Version": "2024-01"}
     )
-    return r.json()
+    data = r.json()
+    if "errors" in data:
+        st.error(f"API Error: {data['errors']}")
+        return None
+    return data
 
 @st.cache_data(ttl=60)
 def fetch_monday_data():
     data = gql("""
     {
       boards(ids: %s) {
-        columns { id title type }
+        columns { id title }
         items_page(limit: 500) {
           items {
             name
-            column_values { id text value }
+            column_values { id text }
           }
         }
       }
     }
     """ % BOARD_ID)
 
-    if "errors" in data:
-        st.error(f"API Error: {data['errors']}")
+    if not data:
         return pd.DataFrame()
 
     board = data["data"]["boards"][0]
@@ -49,21 +51,7 @@ def fetch_monday_data():
         row = {"Name": item["name"]}
         for col in item["column_values"]:
             title = columns.get(col["id"], col["id"])
-            text = col.get("text") or ""
-            # Dropdown columns sometimes return numeric IDs in text — parse label from value
-            if col.get("value") and (not text or text.replace(",","").replace(".","").isdigit()):
-                try:
-                    val = json.loads(col["value"])
-                    if isinstance(val, dict):
-                        ids = val.get("ids", [])
-                        if ids and "labels" in val:
-                            labels = val.get("labels", {})
-                            text = ", ".join(str(labels.get(str(i), i)) for i in ids)
-                        elif "label" in val:
-                            text = val["label"].get("name", text)
-                except:
-                    pass
-            row[title] = text
+            row[title] = col.get("text") or ""
         rows.append(row)
 
     df = pd.DataFrame(rows)
@@ -142,7 +130,6 @@ def main():
             fig.update_layout(showlegend=True, margin=dict(t=10, b=10), height=280)
             st.plotly_chart(fig, use_container_width=True)
 
-    # Tickets by Customer — sorted by most tickets
     st.subheader("Tickets by Customer — sorted by volume")
     if customer_col in df.columns:
         df_cust = df[df[customer_col].str.strip() != ""]
@@ -150,14 +137,11 @@ def main():
             cust_data = df_cust[customer_col].value_counts().reset_index()
             cust_data.columns = ["Customer", "Count"]
             cust_data = cust_data.sort_values("Count", ascending=True)
-
-            colors = ["#378ADD"] * len(cust_data)
-
             fig = go.Figure(go.Bar(
                 x=cust_data["Count"],
                 y=cust_data["Customer"],
                 orientation="h",
-                marker_color=colors,
+                marker_color="#378ADD",
                 text=cust_data["Count"],
                 textposition="auto",
             ))
@@ -168,7 +152,7 @@ def main():
             )
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("No customer data available")
+            st.info(f"Customer column values: {df[customer_col].unique().tolist()}")
 
     st.divider()
     if st.button("🔄 Refresh now"):
