@@ -5,6 +5,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 import time
+import json
 
 st.set_page_config(page_title="Customer Support Dashboard", page_icon="🎯", layout="wide")
 
@@ -14,38 +15,30 @@ BOARD_ID = st.secrets.get("MONDAY_BOARD_ID", "5098274792")
 PRIORITY_ORDER = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
 PRIORITY_COLORS = {"Critical": "#A32D2D", "High": "#E24B4A", "Medium": "#EF9F27", "Low": "#639922"}
 
+def gql(query):
+    r = requests.post(
+        "https://api.monday.com/v2",
+        json={"query": query},
+        headers={"Authorization": API_TOKEN, "Content-Type": "application/json", "API-Version": "2024-01"}
+    )
+    return r.json()
+
 @st.cache_data(ttl=60)
 def fetch_monday_data():
-    query = """
+    data = gql("""
     {
       boards(ids: %s) {
         columns { id title }
         items_page(limit: 500) {
           items {
             name
-            column_values {
-              id
-              text
-              ... on BoardRelationValue { display_value }
-              ... on MirrorValue { display_value }
-              ... on LinkedItemsValue { display_value }
-            }
+            column_values { id text value }
           }
         }
       }
     }
-    """ % BOARD_ID
+    """ % BOARD_ID)
 
-    response = requests.post(
-        "https://api.monday.com/v2",
-        json={"query": query},
-        headers={
-            "Authorization": API_TOKEN,
-            "Content-Type": "application/json",
-            "API-Version": "2024-01"
-        }
-    )
-    data = response.json()
     board = data["data"]["boards"][0]
     columns = {col["id"]: col["title"] for col in board["columns"]}
     items = board["items_page"]["items"]
@@ -55,7 +48,16 @@ def fetch_monday_data():
         row = {"Name": item["name"]}
         for col in item["column_values"]:
             title = columns.get(col["id"], col["id"])
-            text = col.get("text") or col.get("display_value") or ""
+            text = col.get("text") or ""
+            if not text and col.get("value"):
+                try:
+                    val = json.loads(col["value"])
+                    if isinstance(val, dict):
+                        text = val.get("display_value") or val.get("text") or val.get("name") or ""
+                    elif isinstance(val, list) and val:
+                        text = str(val[0])
+                except:
+                    pass
             row[title] = text
         rows.append(row)
 
