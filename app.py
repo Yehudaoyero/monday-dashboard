@@ -82,15 +82,13 @@ def fetch_monday_data():
             row[label] = col["text"] or ""
         rows.append(row)
     df = pd.DataFrame(rows)
-  if "Time Spent (minutes)" in df.columns:
-  if "Time Spent (minutes)" in df.columns:
+ if "Time Spent (minutes)" in df.columns:
         df["Time Spent (minutes)"] = pd.to_numeric(
             df["Time Spent (minutes)"], errors="coerce"
         ).fillna(0)
     else:
         df["Time Spent (minutes)"] = 0
-    else:
-        df["Time Spent (minutes)"] = 0
+    
     return df
 
 # ─── HELPERS ──────────────────────────────────────────────
