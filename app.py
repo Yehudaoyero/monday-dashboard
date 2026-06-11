@@ -66,8 +66,8 @@ def fetch_monday_data():
 def main():
     st.markdown(
         f"""
-        <div style="display:flex; align-items:flex-start; gap:16px; margin-bottom:8px;">
-            <img src="https://raw.githubusercontent.com/Yehudaoyero/monday-dashboard/main/Logo.png" height="120" style="margin-top:-40px;">
+        <div style="display:flex; align-items:center; gap:16px; margin-bottom:8px;">
+            <img src="https://raw.githubusercontent.com/Yehudaoyero/monday-dashboard/main/Logo.png" height="60">
             <div>
                 <div style="font-size:28px; font-weight:700; color: var(--text-color);">Customer Support Dashboard</div>
                 <div style="font-size:13px; color:gray;">Last refresh: {datetime.now().strftime('%H:%M:%S')} • Auto-refreshes every 60 seconds</div>
@@ -103,43 +103,40 @@ def main():
 
     st.divider()
 
+    def make_pie(title, data_col, color_map=None, colors=None):
+        if data_col not in df.columns:
+            return
+        counts = df[df[data_col] != ""][data_col].value_counts().reset_index()
+        counts.columns = [data_col, "Count"]
+        if color_map:
+            fig = px.pie(counts, names=data_col, values="Count", hole=0.45,
+                         color=data_col, color_discrete_map=color_map,
+                         title=title)
+        else:
+            fig = px.pie(counts, names=data_col, values="Count", hole=0.45,
+                         color_discrete_sequence=colors or px.colors.qualitative.Set2,
+                         title=title)
+        fig.update_layout(
+            title=dict(text=title, x=0.5, xanchor="center", font=dict(size=16)),
+            showlegend=True,
+            legend=dict(orientation="h", yanchor="top", y=-0.05, xanchor="center", x=0.5),
+            margin=dict(t=50, b=60, l=10, r=10),
+            height=300
+        )
+        fig.update_traces(textposition="inside", textinfo="percent")
+        st.plotly_chart(fig, use_container_width=True)
+
     col1, col2 = st.columns(2)
     with col1:
-        st.subheader("Issue Type")
-        if "Issue Type" in df.columns:
-            counts = df[df["Issue Type"] != ""]["Issue Type"].value_counts().reset_index()
-            counts.columns = ["Issue Type", "Count"]
-            fig = px.pie(counts, names="Issue Type", values="Count", hole=0.4, color_discrete_sequence=px.colors.qualitative.Set2)
-            fig.update_layout(showlegend=True, margin=dict(t=10, b=10), height=280)
-            st.plotly_chart(fig, use_container_width=True)
-
+        make_pie("Issue Type", "Issue Type", colors=px.colors.qualitative.Set2)
     with col2:
-        st.subheader("Resolution Type")
-        if "Resolution Type" in df.columns:
-            counts = df[df["Resolution Type"] != ""]["Resolution Type"].value_counts().reset_index()
-            counts.columns = ["Resolution Type", "Count"]
-            fig = px.pie(counts, names="Resolution Type", values="Count", hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
-            fig.update_layout(showlegend=True, margin=dict(t=10, b=10), height=280)
-            st.plotly_chart(fig, use_container_width=True)
+        make_pie("Resolution Type", "Resolution Type", colors=px.colors.qualitative.Pastel)
 
     col3, col4 = st.columns(2)
     with col3:
-        st.subheader("Customer Issue Verified")
-        if "Customer Issue Verified" in df.columns:
-            counts = df[df["Customer Issue Verified"] != ""]["Customer Issue Verified"].value_counts().reset_index()
-            counts.columns = ["Verified", "Count"]
-            fig = px.pie(counts, names="Verified", values="Count", hole=0.4, color="Verified", color_discrete_map={"Yes": "#639922", "No": "#E24B4A"})
-            fig.update_layout(showlegend=True, margin=dict(t=10, b=10), height=280)
-            st.plotly_chart(fig, use_container_width=True)
-
+        make_pie("Customer Issue Verified", "Customer Issue Verified", color_map={"Yes": "#639922", "No": "#E24B4A"})
     with col4:
-        st.subheader("Issue Source")
-        if "Issue Source" in df.columns:
-            counts = df[df["Issue Source"] != ""]["Issue Source"].value_counts().reset_index()
-            counts.columns = ["Source", "Count"]
-            fig = px.pie(counts, names="Source", values="Count", hole=0.4, color_discrete_sequence=px.colors.qualitative.Bold)
-            fig.update_layout(showlegend=True, margin=dict(t=10, b=10), height=280)
-            st.plotly_chart(fig, use_container_width=True)
+        make_pie("Issue Source", "Issue Source", colors=px.colors.qualitative.Bold)
 
     st.subheader("Tickets by Customer — sorted by volume")
     if customer_col in df.columns:
