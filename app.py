@@ -66,8 +66,8 @@ def fetch_monday_data():
 def main():
     st.markdown(
         f"""
-        <div style="display:flex; align-items:center; gap:16px; margin-top:5px;">
-            <img src="https://raw.githubusercontent.com/Yehudaoyero/monday-dashboard/main/Logo.png" height="60">
+        <div style="display:flex; align-items:flex-start; gap:16px; margin-bottom:8px;">
+            <img src="https://raw.githubusercontent.com/Yehudaoyero/monday-dashboard/main/Logo.png" height="70">
             <div>
                 <div style="font-size:28px; font-weight:700; color: var(--text-color);">Customer Support Dashboard</div>
                 <div style="font-size:13px; color:gray;">Last refresh: {datetime.now().strftime('%H:%M:%S')} • Auto-refreshes every 60 seconds</div>
