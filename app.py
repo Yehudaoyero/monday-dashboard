@@ -138,9 +138,11 @@ def main():
             cust_data = df_cust[customer_col].value_counts().reset_index()
             cust_data.columns = ["Customer", "Count"]
             cust_data = cust_data.sort_values("Count", ascending=True)
+            # Add prefix to prevent numeric customer names from being treated as numbers
+            cust_data["CustomerLabel"] = cust_data["Customer"].apply(lambda x: f"  {x}")
             fig = go.Figure(go.Bar(
                 x=cust_data["Count"],
-                y=cust_data["Customer"],
+                y=cust_data["CustomerLabel"],
                 orientation="h",
                 marker_color="#378ADD",
                 text=cust_data["Count"],
@@ -150,6 +152,7 @@ def main():
                 height=max(200, len(cust_data) * 50 + 80),
                 margin=dict(t=10, b=10),
                 xaxis=dict(title="Tickets", dtick=1),
+                yaxis=dict(type="category"),
             )
             st.plotly_chart(fig, use_container_width=True)
 
