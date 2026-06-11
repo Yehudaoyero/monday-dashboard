@@ -66,7 +66,7 @@ def fetch_monday_data():
 def main():
     st.markdown(
         f"""
-        <div style="display:flex; align-items:center; gap:16px; margin-bottom:8px;">
+        <div style="display:flex; align-items:center; gap:16px; margin-top:-20px;">
             <img src="https://raw.githubusercontent.com/Yehudaoyero/monday-dashboard/main/Logo.png" height="60">
             <div>
                 <div style="font-size:28px; font-weight:700; color: var(--text-color);">Customer Support Dashboard</div>
