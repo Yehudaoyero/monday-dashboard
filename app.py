@@ -49,7 +49,10 @@ def fetch_monday_data():
         row = {"Name": item["name"]}
         for col in item["column_values"]:
             title = columns.get(col["id"], col["id"])
-            row[title] = col["text"] or ""
+            text = col["text"] or ""
+            if "," in text:
+                text = text.split(",")[0].strip()
+            row[title] = text
         rows.append(row)
 
     df = pd.DataFrame(rows)
