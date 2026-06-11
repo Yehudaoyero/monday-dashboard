@@ -64,8 +64,15 @@ def fetch_monday_data():
     return df
 
 def main():
-    st.title("🎯 Customer Support Dashboard")
-    st.caption(f"Last refresh: {datetime.now().strftime('%H:%M:%S')}  •  Auto-refreshes every 60 seconds")
+    col_logo, col_title = st.columns([1, 8])
+    with col_logo:
+        try:
+            st.image("logo.png", width=80)
+        except:
+            pass
+    with col_title:
+        st.title("Customer Support Dashboard")
+        st.caption(f"Last refresh: {datetime.now().strftime('%H:%M:%S')}  •  Auto-refreshes every 60 seconds")
 
     with st.spinner("Loading data from Monday..."):
         df = fetch_monday_data()
