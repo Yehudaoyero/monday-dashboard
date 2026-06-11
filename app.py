@@ -5,6 +5,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 import time
+import json
 
 st.set_page_config(page_title="Customer Support Dashboard", page_icon="🎯", layout="wide")
 
@@ -28,11 +29,11 @@ def fetch_monday_data():
     data = gql("""
     {
       boards(ids: %s) {
-        columns { id title }
+        columns { id title settings_str }
         items_page(limit: 500) {
           items {
             name
-            column_values { id text }
+            column_values { id text value }
           }
         }
       }
@@ -43,15 +44,44 @@ def fetch_monday_data():
         return pd.DataFrame()
 
     board = data["data"]["boards"][0]
-    columns = {col["id"]: col["title"] for col in board["columns"]}
+
+    # Build label maps for dropdown columns
+    dropdown_labels = {}
+    columns = {}
+    for col in board["columns"]:
+        columns[col["id"]] = col["title"]
+        try:
+            settings = json.loads(col.get("settings_str") or "{}")
+            labels = settings.get("labels", [])
+            if labels:
+                # labels is a list of {id, name} or dict {id: name}
+                if isinstance(labels, list):
+                    dropdown_labels[col["id"]] = {str(l["id"]): l["name"] for l in labels if "id" in l and "name" in l}
+                elif isinstance(labels, dict):
+                    dropdown_labels[col["id"]] = {str(k): v for k, v in labels.items()}
+        except:
+            pass
+
     items = board["items_page"]["items"]
 
     rows = []
     for item in items:
         row = {"Name": item["name"]}
         for col in item["column_values"]:
-            title = columns.get(col["id"], col["id"])
-            row[title] = col.get("text") or ""
+            col_id = col["id"]
+            title = columns.get(col_id, col_id)
+            text = col.get("text") or ""
+
+            # If text looks like a number and we have dropdown labels — map it
+            if col_id in dropdown_labels and text:
+                label_map = dropdown_labels[col_id]
+                # text might be comma-separated IDs
+                parts = [p.strip() for p in text.split(",")]
+                mapped = [label_map.get(p, p) for p in parts if p]
+                if mapped:
+                    text = ", ".join(mapped)
+
+            row[title] = text
         rows.append(row)
 
     df = pd.DataFrame(rows)
@@ -152,7 +182,7 @@ def main():
             )
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info(f"Customer column values: {df[customer_col].unique().tolist()}")
+            st.info(f"Customer values: {df[customer_col].unique().tolist()}")
 
     st.divider()
     if st.button("🔄 Refresh now"):
