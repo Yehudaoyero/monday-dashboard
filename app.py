@@ -67,7 +67,7 @@ def main():
     col_logo, col_title = st.columns([1, 8])
     with col_logo:
         try:
-            st.image("logo.png", width=80)
+            st.image("Logo.png", width=80)
         except:
             pass
     with col_title:
