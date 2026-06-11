@@ -23,7 +23,7 @@ def fetch_monday_data():
         items_page(limit: 500) {
           items {
             name
-            column_values { id text }
+            column_values { id text value }
           }
         }
       }
@@ -49,10 +49,7 @@ def fetch_monday_data():
         row = {"Name": item["name"]}
         for col in item["column_values"]:
             title = columns.get(col["id"], col["id"])
-            text = col["text"] or ""
-            if "," in text:
-                text = text.split(",")[0].strip()
-            row[title] = text
+            row[title] = col["text"] or ""
         rows.append(row)
 
     df = pd.DataFrame(rows)
@@ -79,8 +76,12 @@ def main():
         st.warning("No data found on this board.")
         return
 
+    # DEBUG — הצג את כל עמודות ה-DataFrame
+    with st.expander("🔍 Debug — עמודות זמינות (לחץ לפתיחה)"):
+        st.write("עמודות:", df.columns.tolist())
+        st.dataframe(df)
+
     status_col = "Status"
-    priority_col = "Priority"
     customer_col = "Customer"
     time_col = "Time Spent (minutes)"
 
@@ -138,22 +139,28 @@ def main():
             st.plotly_chart(fig, use_container_width=True)
 
     st.subheader("Tickets by Customer — sorted by highest priority")
-    if customer_col in df.columns and priority_col in df.columns:
-        cust_data = df.groupby(customer_col).agg(Count=("Name", "count"), Priorities=(priority_col, list)).reset_index()
-        cust_data["Top Priority"] = cust_data["Priorities"].apply(top_priority)
-        cust_data["Priority Rank"] = cust_data["Top Priority"].map(lambda p: PRIORITY_ORDER.get(p, 99))
-        cust_data["Color"] = cust_data["Top Priority"].map(lambda p: PRIORITY_COLORS.get(p, "#888780"))
-        cust_data = cust_data.sort_values("Priority Rank")
-        fig = go.Figure(go.Bar(
-            x=cust_data["Count"],
-            y=cust_data[customer_col],
-            orientation="h",
-            marker_color=cust_data["Color"],
-            text=cust_data["Top Priority"],
-            textposition="auto",
-        ))
-        fig.update_layout(height=max(200, len(cust_data) * 50 + 80), margin=dict(t=10, b=10), xaxis=dict(title="Tickets", dtick=1), yaxis=dict(autorange="reversed"))
-        st.plotly_chart(fig, use_container_width=True)
+    if customer_col in df.columns and "Priority" in df.columns:
+        df_cust = df[df[customer_col].str.strip() != ""]
+        if not df_cust.empty:
+            cust_data = df_cust.groupby(customer_col).agg(Count=("Name", "count"), Priorities=("Priority", list)).reset_index()
+            cust_data["Top Priority"] = cust_data["Priorities"].apply(top_priority)
+            cust_data["Priority Rank"] = cust_data["Top Priority"].map(lambda p: PRIORITY_ORDER.get(p, 99))
+            cust_data["Color"] = cust_data["Top Priority"].map(lambda p: PRIORITY_COLORS.get(p, "#888780"))
+            cust_data = cust_data.sort_values("Priority Rank")
+            fig = go.Figure(go.Bar(
+                x=cust_data["Count"],
+                y=cust_data[customer_col],
+                orientation="h",
+                marker_color=cust_data["Color"],
+                text=cust_data["Top Priority"],
+                textposition="auto",
+            ))
+            fig.update_layout(height=max(200, len(cust_data) * 50 + 80), margin=dict(t=10, b=10), xaxis=dict(title="Tickets", dtick=1), yaxis=dict(autorange="reversed"))
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No customer data available")
+    else:
+        st.warning(f"Column '{customer_col}' not found. Available: {df.columns.tolist()}")
 
     st.divider()
     if st.button("🔄 Refresh now"):
