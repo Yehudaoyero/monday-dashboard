@@ -25,46 +25,141 @@ def gql(query):
     return data
 
 @st.cache_data(ttl=60)
-def fetch_raw():
-    return gql("""
+def fetch_monday_data():
+    data = gql("""
     {
       boards(ids: %s) {
-        columns { id title settings_str }
-        items_page(limit: 5) {
+        columns { id title }
+        items_page(limit: 500) {
           items {
             name
-            column_values { id text value }
+            column_values { id text }
           }
         }
       }
     }
     """ % BOARD_ID)
 
-def main():
-    st.title("🔍 Debug — Raw API Data")
-
-    data = fetch_raw()
     if not data:
-        return
+        return pd.DataFrame()
 
     board = data["data"]["boards"][0]
+    columns = {col["id"]: col["title"] for col in board["columns"]}
+    items = board["items_page"]["items"]
 
-    st.subheader("Columns & Settings")
-    for col in board["columns"]:
-        if col["title"] in ("Customer", "Status", "Priority", "Issue Type"):
-            st.write(f"**{col['title']}** (id: {col['id']})")
-            try:
-                settings = json.loads(col.get("settings_str") or "{}")
-                st.json(settings)
-            except:
-                st.write("No settings")
-
-    st.subheader("First 5 Items — Raw Values")
-    for item in board["items_page"]["items"]:
-        st.write(f"**{item['name']}**")
+    rows = []
+    for item in items:
+        row = {"Name": item["name"]}
         for col in item["column_values"]:
-            if col["id"] in [c["id"] for c in board["columns"] if c["title"] in ("Customer", "Status", "Priority")]:
-                st.write(f"  - {col['id']}: text=`{col['text']}` value=`{col['value']}`")
+            title = columns.get(col["id"], col["id"])
+            row[title] = col.get("text") or ""
+        rows.append(row)
+
+    df = pd.DataFrame(rows)
+    time_col = "Time Spent (minutes)"
+    if time_col in df.columns:
+        df[time_col] = pd.to_numeric(df[time_col], errors="coerce").fillna(0)
+    else:
+        df[time_col] = 0
+    return df
+
+def main():
+    st.title("🎯 Customer Support Dashboard")
+    st.caption(f"Last refresh: {datetime.now().strftime('%H:%M:%S')}  •  Auto-refreshes every 60 seconds")
+
+    with st.spinner("Loading data from Monday..."):
+        df = fetch_monday_data()
+
+    if df.empty:
+        st.warning("No data found on this board.")
+        return
+
+    status_col = "Status"
+    time_col = "Time Spent (minutes)"
+    customer_col = "Customer"
+
+    total = len(df)
+    resolved = len(df[df[status_col].str.strip() == "Resolved"]) if status_col in df.columns else 0
+    waiting = len(df[df[status_col].str.lower().str.contains("wait", na=False)]) if status_col in df.columns else 0
+    open_t = len(df[df[status_col].str.strip() == "Open"]) if status_col in df.columns else 0
+    avg_time = int(df[time_col].mean()) if total and time_col in df.columns else 0
+
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("📋 Total Tickets", total)
+    c2.metric("✅ Resolved", resolved)
+    c3.metric("⏳ Waiting on Customer", waiting)
+    c4.metric("🔴 Open", open_t)
+    c5.metric("⏱ Avg Support Time", f"{avg_time} min")
+
+    st.divider()
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("Issue Type")
+        if "Issue Type" in df.columns:
+            counts = df[df["Issue Type"] != ""]["Issue Type"].value_counts().reset_index()
+            counts.columns = ["Issue Type", "Count"]
+            fig = px.pie(counts, names="Issue Type", values="Count", hole=0.4, color_discrete_sequence=px.colors.qualitative.Set2)
+            fig.update_layout(showlegend=True, margin=dict(t=10, b=10), height=280)
+            st.plotly_chart(fig, use_container_width=True)
+
+    with col2:
+        st.subheader("Resolution Type")
+        if "Resolution Type" in df.columns:
+            counts = df[df["Resolution Type"] != ""]["Resolution Type"].value_counts().reset_index()
+            counts.columns = ["Resolution Type", "Count"]
+            fig = px.pie(counts, names="Resolution Type", values="Count", hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
+            fig.update_layout(showlegend=True, margin=dict(t=10, b=10), height=280)
+            st.plotly_chart(fig, use_container_width=True)
+
+    col3, col4 = st.columns(2)
+    with col3:
+        st.subheader("Customer Issue Verified")
+        if "Customer Issue Verified" in df.columns:
+            counts = df[df["Customer Issue Verified"] != ""]["Customer Issue Verified"].value_counts().reset_index()
+            counts.columns = ["Verified", "Count"]
+            fig = px.pie(counts, names="Verified", values="Count", hole=0.4, color="Verified", color_discrete_map={"Yes": "#639922", "No": "#E24B4A"})
+            fig.update_layout(showlegend=True, margin=dict(t=10, b=10), height=280)
+            st.plotly_chart(fig, use_container_width=True)
+
+    with col4:
+        st.subheader("Issue Source")
+        if "Issue Source" in df.columns:
+            counts = df[df["Issue Source"] != ""]["Issue Source"].value_counts().reset_index()
+            counts.columns = ["Source", "Count"]
+            fig = px.pie(counts, names="Source", values="Count", hole=0.4, color_discrete_sequence=px.colors.qualitative.Bold)
+            fig.update_layout(showlegend=True, margin=dict(t=10, b=10), height=280)
+            st.plotly_chart(fig, use_container_width=True)
+
+    st.subheader("Tickets by Customer — sorted by volume")
+    if customer_col in df.columns:
+        df_cust = df[df[customer_col].str.strip() != ""]
+        if not df_cust.empty:
+            cust_data = df_cust[customer_col].value_counts().reset_index()
+            cust_data.columns = ["Customer", "Count"]
+            cust_data = cust_data.sort_values("Count", ascending=True)
+            fig = go.Figure(go.Bar(
+                x=cust_data["Count"],
+                y=cust_data["Customer"],
+                orientation="h",
+                marker_color="#378ADD",
+                text=cust_data["Count"],
+                textposition="auto",
+            ))
+            fig.update_layout(
+                height=max(200, len(cust_data) * 50 + 80),
+                margin=dict(t=10, b=10),
+                xaxis=dict(title="Tickets", dtick=1),
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+    st.divider()
+    if st.button("🔄 Refresh now"):
+        st.cache_data.clear()
+        st.rerun()
+
+    time.sleep(60)
+    st.rerun()
 
 if __name__ == "__main__":
     main()
