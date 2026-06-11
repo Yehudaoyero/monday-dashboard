@@ -23,7 +23,13 @@ def fetch_monday_data():
         items_page(limit: 500) {
           items {
             name
-            column_values { id text value }
+            column_values {
+              id
+              text
+              ... on BoardRelationValue { display_value }
+              ... on MirrorValue { display_value }
+              ... on LinkedItemsValue { display_value }
+            }
           }
         }
       }
@@ -49,7 +55,8 @@ def fetch_monday_data():
         row = {"Name": item["name"]}
         for col in item["column_values"]:
             title = columns.get(col["id"], col["id"])
-            row[title] = col["text"] or ""
+            text = col.get("text") or col.get("display_value") or ""
+            row[title] = text
         rows.append(row)
 
     df = pd.DataFrame(rows)
@@ -58,7 +65,7 @@ def fetch_monday_data():
         df[time_col] = pd.to_numeric(df[time_col], errors="coerce").fillna(0)
     else:
         df[time_col] = 0
-    return df, columns
+    return df
 
 def top_priority(priorities):
     ranked = [PRIORITY_ORDER.get(p, 99) for p in priorities]
@@ -70,16 +77,11 @@ def main():
     st.caption(f"Last refresh: {datetime.now().strftime('%H:%M:%S')}  •  Auto-refreshes every 60 seconds")
 
     with st.spinner("Loading data from Monday..."):
-        df, columns = fetch_monday_data()
+        df = fetch_monday_data()
 
     if df.empty:
         st.warning("No data found on this board.")
         return
-
-    # DEBUG — הצג את כל עמודות ה-DataFrame
-    with st.expander("🔍 Debug — עמודות זמינות (לחץ לפתיחה)"):
-        st.write("עמודות:", df.columns.tolist())
-        st.dataframe(df)
 
     status_col = "Status"
     customer_col = "Customer"
@@ -159,8 +161,6 @@ def main():
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("No customer data available")
-    else:
-        st.warning(f"Column '{customer_col}' not found. Available: {df.columns.tolist()}")
 
     st.divider()
     if st.button("🔄 Refresh now"):
