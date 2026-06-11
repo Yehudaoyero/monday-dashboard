@@ -49,7 +49,21 @@ def fetch_monday_data():
         row = {"Name": item["name"]}
         for col in item["column_values"]:
             title = columns.get(col["id"], col["id"])
-            row[title] = col.get("text") or ""
+            text = col.get("text") or ""
+            # Dropdown columns sometimes return numeric IDs in text — parse label from value
+            if col.get("value") and (not text or text.replace(",","").replace(".","").isdigit()):
+                try:
+                    val = json.loads(col["value"])
+                    if isinstance(val, dict):
+                        ids = val.get("ids", [])
+                        if ids and "labels" in val:
+                            labels = val.get("labels", {})
+                            text = ", ".join(str(labels.get(str(i), i)) for i in ids)
+                        elif "label" in val:
+                            text = val["label"].get("name", text)
+                except:
+                    pass
+            row[title] = text
         rows.append(row)
 
     df = pd.DataFrame(rows)
