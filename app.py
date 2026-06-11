@@ -67,7 +67,7 @@ def main():
     st.markdown(
         f"""
         <div style="display:flex; align-items:center; gap:16px; margin-bottom:8px;">
-            <img src="https://raw.githubusercontent.com/Yehudaoyero/monday-dashboard/main/Logo.png" height="60">
+            <img src="https://raw.githubusercontent.com/Yehudaoyero/monday-dashboard/main/Logo.png" height="120" style="margin-top:-30px;">
             <div>
                 <div style="font-size:28px; font-weight:700; color: var(--text-color);">Customer Support Dashboard</div>
                 <div style="font-size:13px; color:gray;">Last refresh: {datetime.now().strftime('%H:%M:%S')} • Auto-refreshes every 60 seconds</div>
